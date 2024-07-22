@@ -1,5 +1,5 @@
 # MNVUSAGE - Monitor NV Usage
-For webview to monitor you gpu status
+For webview to monitor your nvidia gpu status
 
 ## Just want to try
 '''
