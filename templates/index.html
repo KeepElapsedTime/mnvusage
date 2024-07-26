@@ -10,16 +10,48 @@
         .gpu-card {
             margin-bottom: 20px;
         }
+        .chart-container {
+            position: relative;
+            height: 200px;
+            width: 100%;
+        }
+        .temp-container {
+            position: relative;
+            height: 200px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .temp-bar {
+            width: 80%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .temp-fill {
+            height: 100%;
+            transition: width 0.5s ease-in-out;
+        }
+        .temp-text {
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div class="container mt-5">
-        <h1 class="text-center mb-4">MNVUASGE - Monitor NV GPU Usage</h1>
-	<h3 class="text-center mb-4">automatice refresh every 15s</h3>
+        <h1 class="text-center mb-4">MNVUASGE</h1>
+        <p class="text-center" id="countdown">Monitor NV GPU Usage - Next update in 30 seconds</p>
         <div id="gpu-container" class="row"></div>
     </div>
 
     <script>
+        let countdown = 30;
+
         function updateGPUInfo() {
             fetch('/gpu_data')
                 .then(response => response.json())
@@ -33,38 +65,132 @@
                             <div class="card">
                                 <div class="card-body">
                                     <h5 class="card-title">${gpu.name} (ID: ${gpu.id})</h5>
-                                    <canvas id="chart-${gpu.id}"></canvas>
-                                    <p>Temperature: ${gpu.temperature}°C</p>
-                                    <p>Memory: ${gpu.memory_used}MB / ${gpu.memory_total}MB</p>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="chart-container">
+                                                <canvas id="load-chart-${gpu.id}"></canvas>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="temp-container">
+                                                <div class="temp-bar">
+                                                    <div id="temp-fill-${gpu.id}" class="temp-fill"></div>
+                                                </div>
+                                                <div id="temp-text-${gpu.id}" class="temp-text"></div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="chart-container">
+                                                <canvas id="memory-chart-${gpu.id}"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         `;
                         container.appendChild(card);
 
-                        const ctx = document.getElementById(`chart-${gpu.id}`).getContext('2d');
-                        new Chart(ctx, {
-                            type: 'doughnut',
-                            data: {
-                                labels: ['Used', 'Free'],
-                                datasets: [{
-                                    data: [gpu.load, 100 - gpu.load],
-                                    backgroundColor: ['#ff6384', '#36a2eb']
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                title: {
-                                    display: true,
-                                    text: 'GPU Load'
-                                }
-                            }
-                        });
+                        createDoughnutChart(`load-chart-${gpu.id}`, 'GPU Load', gpu.load, `${gpu.load.toFixed(1)}%`, `${(100-gpu.load).toFixed(1)}%`);
+                        const memoryUsedPercentage = (gpu.memory_used / gpu.memory_total) * 100;
+                        createDoughnutChart(`memory-chart-${gpu.id}`, 'Memory', memoryUsedPercentage, `${gpu.memory_used}MB`, `${gpu.memory_free}MB`);
+                        updateTempBar(`temp-fill-${gpu.id}`, `temp-text-${gpu.id}`, gpu.temperature);
                     });
                 });
+            countdown = 30;
+        }
+
+        function createDoughnutChart(canvasId, label, usedPercentage, usedLabel, freeLabel) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Used', 'Free'],
+                    datasets: [{
+                        data: [usedPercentage, 100 - usedPercentage],
+                        backgroundColor: ['#ff6384', '#36a2eb']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: label
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                },
+                plugins: [{
+                    id: 'centerText',
+                    afterDraw: function(chart) {
+                        var width = chart.width,
+                            height = chart.height,
+                            ctx = chart.ctx;
+
+                        ctx.restore();
+                        ctx.textBaseline = "middle";
+                        ctx.textAlign = "center";
+
+                        var centerX = width / 2,
+                            centerY = height / 2;
+
+                        // Draw percentage
+                        ctx.font = "bold 16px Arial";
+                        ctx.fillStyle = "#000";
+                        ctx.fillText(`${usedPercentage.toFixed(1)}%`, centerX, centerY - 15);
+
+                        // Draw used label
+                        ctx.font = "12px Arial";
+                        ctx.fillStyle = "#ff6384";
+                        ctx.fillText(usedLabel, centerX, centerY + 5);
+
+                        // Draw free label
+                        ctx.fillStyle = "#36a2eb";
+                        ctx.fillText(freeLabel, centerX, centerY + 20);
+
+                        ctx.save();
+                    }
+                }]
+            });
+        }
+
+        function updateTempBar(fillId, textId, temperature) {
+            const fillElement = document.getElementById(fillId);
+            const textElement = document.getElementById(textId);
+            
+            // 假設最高溫度為100°C
+            const percentage = (temperature / 100) * 100;
+            fillElement.style.width = `${percentage}%`;
+            
+            // 根據溫度改變顏色
+            if (temperature < 50) {
+                fillElement.style.backgroundColor = '#36a2eb';  // 藍色
+            } else if (temperature < 80) {
+                fillElement.style.backgroundColor = '#ffcd56';  // 黃色
+            } else {
+                fillElement.style.backgroundColor = '#ff6384';  // 紅色
+            }
+            
+            textElement.textContent = `Temperature: ${temperature}°C`;
+        }
+
+        function updateCountdown() {
+            countdown--;
+            document.getElementById('countdown').textContent = `Next update in ${countdown} seconds`;
+            if (countdown <= 0) {
+                updateGPUInfo();
+            }
         }
 
         updateGPUInfo();
-        setInterval(updateGPUInfo, 10000);
+        setInterval(updateCountdown, 1000);
     </script>
 </body>
 </html>
