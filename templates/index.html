@@ -40,12 +40,18 @@
             font-size: 18px;
             font-weight: bold;
         }
+        .process-list {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
     <div class="container mt-5">
-        <h1 class="text-center mb-4">MNVUASGE</h1>
-        <p class="text-center" id="countdown">Monitor NV GPU Usage - Next update in 30 seconds</p>
+        <h1 class="text-center mb-4">GPU Monitor</h1>
+        <p class="text-center" id="countdown">A simple tool for monitor nvidia gpu usage</p>
+        <p class="text-center" id="countdown">Next update in 30 seconds</p>
         <div id="gpu-container" class="row"></div>
     </div>
 
@@ -56,6 +62,7 @@
             fetch('/gpu_data')
                 .then(response => response.json())
                 .then(data => {
+                    console.log("Received GPU data:", data);
                     const container = document.getElementById('gpu-container');
                     container.innerHTML = '';
                     data.forEach(gpu => {
@@ -85,6 +92,30 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="process-list">
+                                        <h6>Running Processes:</h6>
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>PID</th>
+                                                    <th>Memory</th>
+                                                    <th>Name</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${gpu.processes && gpu.processes.length > 0 ? 
+                                                    gpu.processes.map(process => `
+                                                        <tr>
+                                                            <td>${process.pid}</td>
+                                                            <td>${process.memory} MB</td>
+                                                            <td>${process.name}</td>
+                                                        </tr>
+                                                    `).join('') : 
+                                                    '<tr><td colspan="3">No processes running</td></tr>'
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -95,6 +126,10 @@
                         createDoughnutChart(`memory-chart-${gpu.id}`, 'Memory', memoryUsedPercentage, `${gpu.memory_used}MB`, `${gpu.memory_free}MB`);
                         updateTempBar(`temp-fill-${gpu.id}`, `temp-text-${gpu.id}`, gpu.temperature);
                     });
+                })
+                .catch(error => {
+                    console.error('Error fetching GPU data:', error);
+                    document.getElementById('gpu-container').innerHTML = '<p class="text-danger">Error loading GPU data. Please check the server logs.</p>';
                 });
             countdown = 30;
         }
