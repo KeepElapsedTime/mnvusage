@@ -23,4 +23,5 @@ docker run -d -p 5555:5000 --gpus all --name mnvusage-container mnvusage
 
 Go to http://localhost:5555
 
-<img src="pic/mnvusage.png" alt="demo" width="480">
+<p align="center">
+	<img src="pic/mnvusage.png" alt="demo" width="480">
