@@ -2,8 +2,8 @@
 For webview to monitor your nvidia gpu status
 
 <p align="center">
-	<img src="pic/logo.jpeg" alt="logo" width="480">
-
+	<img src="pic/logo.jpeg" alt="logo,create by Microsoft Designer" width="480"></p>
+ 
 ## Just want to try
 ```
 python main.py
