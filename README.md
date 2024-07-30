@@ -1,6 +1,9 @@
 # MNVUSAGE - Monitor NV Usage
 For webview to monitor your nvidia gpu status
 
+<p align="center">
+	<img src="pic/logo.jpeg" alt="logo" width="480">
+
 ## Just want to try
 '''
 python main.py
