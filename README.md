@@ -18,3 +18,9 @@ docker build -t mnvusage .
 '''
 docker run -d -p 5555:5000 --gpus all --name mnvusage-container mnvusage
 '''
+
+### View
+
+Go to http://localhost:5555
+
+<img src="pic/mnvusage.png" alt="demo" width="480">
