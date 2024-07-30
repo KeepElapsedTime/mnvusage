@@ -9,7 +9,6 @@ For webview to monitor your nvidia gpu status
 python main.py
 ```
 
------
 
 ## Use Docker to Host
 ### Build a container
