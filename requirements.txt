@@ -2,3 +2,4 @@ Flask==2.3.2
 Werkzeug==2.3.6
 GPUtil==1.4.0
 Flask-CORS==3.0.10
+requests==2.31.0
