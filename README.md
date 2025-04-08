@@ -3,7 +3,9 @@ For webview to monitor your nvidia gpu status
 
 <p align="center">
 	<img src="pic/logo.jpeg" alt="logo,create by Microsoft Designer" width="480"></p>
- 
+
+Before you start, please change the webhook url and ollama target url
+
 ## Just want to try
 ```
 python main.py
