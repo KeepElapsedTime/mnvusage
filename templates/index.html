@@ -1,510 +1,478 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPU & Ollama 監控</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .gpu-card {
-            margin-bottom: 20px;
-        }
-        .chart-container {
-            position: relative;
-            height: 200px;
-            width: 100%;
-        }
-        .temp-container {
-            position: relative;
-            height: 200px;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-        .temp-bar {
-            width: 80%;
-            height: 20px;
-            background-color: #e0e0e0;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .temp-fill {
-            height: 100%;
-            transition: width 0.5s ease-in-out;
-        }
-        .temp-text {
-            margin-top: 10px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        .process-list {
-            margin-top: 20px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .model-list {
-            margin-top: 30px;
-            margin-bottom: 30px;
-        }
-        .model-badge {
-            margin-right: 10px;
-            margin-bottom: 10px;
-            font-size: 1rem;
-            padding: 8px 12px;
-        }
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-        }
-        .status-ok {
-            background-color: #28a745;
-        }
-        .status-warning {
-            background-color: #ffc107;
-        }
-        .status-error {
-            background-color: #dc3545;
-        }
-    </style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>mnvusage</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d0d0d;
+      --surface: #141414;
+      --surface2: #1a1a1a;
+      --border: #222;
+      --text: #e0e0e0;
+      --muted: #666;
+      --accent: #00d4aa;
+      --red: #ef5350;
+      --yellow: #ffd54f;
+      --blue: #42a5f5;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', monospace, system-ui, sans-serif;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: .85rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+    header h1 { font-size: .9rem; font-weight: 700; color: var(--accent); }
+    .pulse {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 1rem; }
+    .countdown { font-size: .75rem; color: var(--muted); }
+    #refresh-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: .3rem .7rem; border-radius: 4px; cursor: pointer; font-size: .75rem;
+      font-family: inherit;
+    }
+    #refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    #settings-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: .3rem .7rem; border-radius: 4px; cursor: pointer; font-size: .75rem;
+      font-family: inherit;
+    }
+    #settings-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Main layout ── */
+    main { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* ── Section labels ── */
+    .section-label {
+      font-size: .7rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: .75rem;
+    }
+
+    /* ── GPU grid ── */
+    .gpu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); }
+    .gpu-card { background: var(--surface); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+    .gpu-title { display: flex; align-items: center; gap: .6rem; }
+    .gpu-name { font-size: .85rem; font-weight: 600; color: #fff; }
+    .temp-badge {
+      font-size: .7rem; padding: .15rem .45rem; border-radius: 3px;
+      font-weight: 600; margin-left: auto;
+    }
+    .temp-cool { background: rgba(66,165,245,.15); color: var(--blue); border: 1px solid rgba(66,165,245,.3); }
+    .temp-warm { background: rgba(255,213,79,.15); color: var(--yellow); border: 1px solid rgba(255,213,79,.3); }
+    .temp-hot  { background: rgba(239,83,80,.15);  color: var(--red);    border: 1px solid rgba(239,83,80,.3); }
+
+    /* ── Usage bars ── */
+    .bars { display: flex; flex-direction: column; gap: .6rem; }
+    .bar-row { display: flex; flex-direction: column; gap: .25rem; }
+    .bar-label { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }
+    .bar-track {
+      height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%; border-radius: 3px;
+      transition: width .5s ease;
+    }
+    .bar-gpu  { background: var(--accent); }
+    .bar-vram { background: var(--blue); }
+
+    /* ── Charts ── */
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .chart-box { background: var(--surface2); border: 1px solid var(--border); padding: .75rem; border-radius: 4px; }
+    .chart-title { font-size: .68rem; color: var(--muted); margin-bottom: .4rem; text-align: center; }
+    .chart-box canvas { max-height: 110px; }
+
+    /* ── Process table ── */
+    .proc-wrap { max-height: 120px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .3rem .5rem; font-size: .72rem; }
+    th { color: var(--muted); border-bottom: 1px solid var(--border); }
+    td { color: var(--text); border-bottom: 1px solid rgba(255,255,255,.04); }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Ollama models ── */
+    .model-section { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem; }
+    .model-group { margin-bottom: 1rem; }
+    .model-source { font-size: .68rem; color: var(--muted); margin-bottom: .5rem; }
+    .model-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .pill {
+      font-size: .75rem; padding: .25rem .65rem;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 3px; color: var(--text);
+    }
+    .no-models { color: var(--muted); font-size: .8rem; }
+    .api-error { font-size: .72rem; color: var(--red); margin-top: .5rem; }
+
+    /* ── Settings panel ── */
+    #settings-panel {
+      display: none;
+      position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      z-index: 100; align-items: center; justify-content: center;
+    }
+    #settings-panel.open { display: flex; }
+    .settings-box {
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 1.5rem; width: min(480px, 90vw); border-radius: 6px;
+    }
+    .settings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .settings-header h2 { font-size: .9rem; color: #fff; }
+    .close-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; }
+    .url-list { display: flex; flex-direction: column; gap: .5rem; margin-bottom: 1rem; }
+    .url-row { display: flex; gap: .4rem; align-items: center; }
+    .url-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: .4rem .6rem; border-radius: 4px;
+      font-size: .8rem; font-family: inherit; outline: none;
+    }
+    .url-input:focus { border-color: var(--accent); }
+    .del-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      width: 26px; height: 26px; border-radius: 4px; cursor: pointer;
+      font-size: .8rem; display: flex; align-items: center; justify-content: center;
+    }
+    .del-btn:hover { border-color: var(--red); color: var(--red); }
+    .settings-actions { display: flex; gap: .5rem; justify-content: space-between; align-items: center; }
+    .add-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: .35rem .7rem; border-radius: 4px; cursor: pointer;
+      font-size: .75rem; font-family: inherit;
+    }
+    .add-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .save-btn {
+      background: var(--accent); color: #000; border: none;
+      padding: .35rem .9rem; border-radius: 4px; cursor: pointer;
+      font-size: .8rem; font-weight: 600; font-family: inherit;
+    }
+    .save-btn:hover { opacity: .85; }
+    .save-msg { font-size: .75rem; color: var(--accent); }
+
+    @media (max-width: 500px) {
+      .gpu-grid { grid-template-columns: 1fr; }
+      .charts { grid-template-columns: 1fr; }
+      main { padding: 1rem; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <h1 class="text-center mb-4">GPU & Ollama 監控</h1>
-        <p class="text-center">一個簡單的工具，用於監控NVIDIA GPU使用情況和Ollama模型</p>
-        <p class="text-center" id="countdown">下一次更新將在 30 秒內進行</p>
-        
-        <!-- API URLs 部分 -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h4 class="mb-0">API URLs</h4>
-            </div>
-            <div class="card-body">
-                <form id="api-urls-form">
-                    <div class="mb-3">
-                        <input type="url" class="form-control mb-2" id="api-url-1" placeholder="https://example.com/api/tags">
-                    </div>
-                    <div class="mb-3">
-                        <input type="url" class="form-control mb-2" id="api-url-2" placeholder="https://example.com/endpoint1">
-                    </div>
-                    <div class="mb-3">
-                        <input type="url" class="form-control mb-2" id="api-url-3" placeholder="https://example.com/endpoint2">
-                    </div>
-                    <button type="submit" class="btn btn-primary">更新 URLs</button>
-                    <div id="url-update-message" class="mt-2"></div>
-                </form>
-            </div>
-        </div>
-        
-        <!-- Ollama 模型部分 -->
-        <div class="card model-list">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">Ollama 模型</h4>
-                <div id="ollama-status">
-                    <span class="status-indicator status-ok" id="ollama-status-indicator"></span>
-                    <span id="ollama-status-text">已連接</span>
-                </div>
-            </div>
-            <div class="card-body">
-                <div id="api-errors" class="alert alert-danger d-none mb-3"></div>
-                <div id="models-container" class="d-flex flex-wrap">
-                    <p id="no-models-message">正在加載模型...</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- GPU 容器部分 -->
-        <div id="gpu-container" class="row"></div>
+
+<header>
+  <div class="pulse" id="status-dot"></div>
+  <h1>mnvusage</h1>
+  <div class="header-right">
+    <span class="countdown" id="countdown"></span>
+    <button id="refresh-btn" onclick="refresh()">↺ Refresh</button>
+    <button id="settings-btn" onclick="openSettings()">⚙ Settings</button>
+  </div>
+</header>
+
+<!-- Settings panel -->
+<div id="settings-panel">
+  <div class="settings-box">
+    <div class="settings-header">
+      <h2>Ollama API URLs</h2>
+      <button class="close-btn" onclick="closeSettings()">✕</button>
     </div>
+    <div class="url-list" id="url-list"></div>
+    <div class="settings-actions">
+      <button class="add-btn" onclick="addUrlRow()">+ Add URL</button>
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <span class="save-msg" id="save-msg"></span>
+        <button class="save-btn" onclick="saveUrls()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-    <script>
-        let countdown = 30;
-        let ollamaConnected = true;
-        let lastUrlUpdate = 0;
+<main>
+  <div>
+    <p class="section-label">GPU</p>
+    <div class="gpu-grid" id="gpu-container">
+      <div style="padding:1.25rem;color:var(--muted)">Loading...</div>
+    </div>
+  </div>
+  <div>
+    <p class="section-label">Ollama Models</p>
+    <div class="model-section" id="models-container">
+      <span class="no-models">Loading...</span>
+    </div>
+  </div>
+</main>
 
-        // 初始化填入URL值
-        function initializeApiUrls(urls) {
-            console.log("初始化URL輸入框: ", urls);
-            document.getElementById('api-url-1').value = urls[0] || '';
-            document.getElementById('api-url-2').value = urls[1] || '';
-            document.getElementById('api-url-3').value = urls[2] || '';
-        }
-        
-        // 處理API URLs表單提交
-        document.getElementById('api-urls-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            console.log('URL表單已提交');
-            
-            const urls = [
-                document.getElementById('api-url-1').value.trim(),
-                document.getElementById('api-url-2').value.trim(),
-                document.getElementById('api-url-3').value.trim()
-            ];
-            
-            const messageElement = document.getElementById('url-update-message');
-            messageElement.className = 'mt-2 alert alert-info';
-            messageElement.textContent = '正在更新URLs...';
-            
-            console.log("發送更新請求，URLs: ", urls);
-            
-            // 使用fetch API發送請求並記錄詳細的錯誤信息
-            fetch('/update_urls', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ urls: urls }),
-            })
-            .then(response => {
-                console.log("收到更新響應，狀態碼: ", response.status);
-                console.log("響應頭部: ", response.headers);
-                
-                // 檢查響應是否為JSON格式
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    console.error("響應不是JSON格式: ", contentType);
-                    throw new Error(`非JSON響應: ${contentType}`);
-                }
-                
-                return response.json();
-            })
-            .then(data => {
-                console.log("更新響應數據: ", data);
-                if (data && data.success) {
-                    messageElement.className = 'mt-2 alert alert-success';
-                    messageElement.textContent = data.message || "更新成功";
-                    lastUrlUpdate = Date.now();
-                    
-                    // 顯示即將刷新頁面的訊息
-                    messageElement.textContent += "，頁面將在 2 秒後刷新...";
-                    
-                    // 延遲2秒後刷新整個頁面
-                    setTimeout(() => {
-                        console.log("URL更新成功，正在刷新頁面...");
-                        window.location.reload();
-                    }, 2000);
-                } else {
-                    messageElement.className = 'mt-2 alert alert-danger';
-                    messageElement.textContent = (data && data.message) ? data.message : "未知錯誤";
-                    
-                    // 5秒後清除消息
-                    setTimeout(() => {
-                        messageElement.className = 'mt-2';
-                        messageElement.textContent = '';
-                    }, 5000);
-                }
-            })
-            .catch(error => {
-                console.error("URL更新錯誤: ", error);
-                messageElement.className = 'mt-2 alert alert-danger';
-                messageElement.textContent = '更新URLs時發生網絡錯誤: ' + error.message;
-                
-                // 5秒後清除消息
-                setTimeout(() => {
-                    messageElement.className = 'mt-2';
-                    messageElement.textContent = '';
-                }, 5000);
-            });
-        });
+<script>
+let refreshTimer = 30;
+let timerInterval = null;
+let charts = {};
 
-        function updateGPUInfo() {
-            const startTime = Date.now();
-            console.log("開始更新GPU信息，時間戳: ", startTime);
-            
-            fetch('/gpu_data')
-                .then(response => response.json())
-                .then(data => {
-                    const duration = Date.now() - startTime;
-                    console.log(`接收到GPU數據 (${duration}ms)，APIs: ${data.api_urls?.length}，模型: ${data.ollama_models?.length}，錯誤: ${data.api_errors?.length}`);
-                    
-                    // 如果最近進行了URL更新，則更新表單中的URL
-                    if (Date.now() - lastUrlUpdate > 2000) {
-                        if (data.api_urls) {
-                            console.log("設置API URLs: ", data.api_urls);
-                            initializeApiUrls(data.api_urls);
-                        }
-                    }
-                    
-                    // 更新API錯誤（如果有）
-                    const apiErrorsElement = document.getElementById('api-errors');
-                    if (data.api_errors && data.api_errors.length > 0) {
-                        apiErrorsElement.innerHTML = '<strong>API 錯誤:</strong><ul>' + 
-                            data.api_errors.map(err => `<li>${err}</li>`).join('') + 
-                            '</ul>';
-                        apiErrorsElement.classList.remove('d-none');
-                    } else {
-                        apiErrorsElement.classList.add('d-none');
-                    }
-                    
-                    updateOllamaModels(data.ollama_models);
-                    updateGPUCards(data.gpus);
-                    
-                    ollamaConnected = data.ollama_models && data.ollama_models.length > 0;
-                    updateOllamaStatus(ollamaConnected);
-                })
-                .catch(error => {
-                    console.error("獲取GPU數據時出錯: ", error);
-                    document.getElementById('gpu-container').innerHTML = '<p class="text-danger">加載GPU數據時出錯。請檢查服務器日誌。</p>';
-                    ollamaConnected = false;
-                    updateOllamaStatus(false, "連接錯誤");
-                });
-            countdown = 30;
-        }
-        
-        function updateOllamaStatus(isConnected, message = "") {
-            const indicator = document.getElementById('ollama-status-indicator');
-            const text = document.getElementById('ollama-status-text');
-            
-            if (isConnected) {
-                indicator.className = 'status-indicator status-ok';
-                text.textContent = '已連接';
-            } else {
-                indicator.className = 'status-indicator status-error';
-                text.textContent = message || '已斷開';
-            }
-        }
-        
-        function updateOllamaModels(models) {
-            const container = document.getElementById('models-container');
-            const noModelsMessage = document.getElementById('no-models-message');
-            
-            if (!models || models.length === 0) {
-                container.innerHTML = '';
-                noModelsMessage.textContent = '沒有可用的模型';
-                noModelsMessage.style.display = 'block';
-                return;
-            }
-            
-            noModelsMessage.style.display = 'none';
-            container.innerHTML = '';
-            
-            // 按來源分組模型
-            const modelsBySource = {};
-            models.forEach(model => {
-                const source = model.source || '未知來源';
-                
-                if (!modelsBySource[source]) {
-                    modelsBySource[source] = [];
-                }
-                modelsBySource[source].push(model);
-            });
-            
-            // 顯示按來源分組的模型
-            Object.entries(modelsBySource).forEach(([source, sourceModels]) => {
-                // 添加來源標籤
-                const sourceLabel = document.createElement('div');
-                sourceLabel.className = 'w-100 mb-2 mt-3';
-                sourceLabel.innerHTML = `<strong>來源:</strong> ${source}`;
-                container.appendChild(sourceLabel);
-                
-                // 添加此來源的模型
-                sourceModels.forEach(model => {
-                    const modelName = model.name || '未命名模型';
-                    const badge = document.createElement('span');
-                    badge.className = 'badge bg-primary model-badge';
-                    
-                    // 如果有詳細信息，則添加工具提示
-                    if (model.details) {
-                        const details = model.details;
-                        const size = model.size ? `${(model.size / 1024 / 1024 / 1024).toFixed(2)}GB` : '';
-                        const paramSize = details.parameter_size || '';
-                        const quantLevel = details.quantization_level || '';
-                        
-                        badge.title = `大小: ${size}, 參數: ${paramSize}, 量化: ${quantLevel}`;
-                        badge.setAttribute('data-bs-toggle', 'tooltip');
-                        badge.setAttribute('data-bs-placement', 'top');
-                    } else if (model.modified_at) {
-                        const modified = new Date(model.modified_at).toLocaleDateString();
-                        badge.title = `修改時間: ${modified}`;
-                        badge.setAttribute('data-bs-toggle', 'tooltip');
-                        badge.setAttribute('data-bs-placement', 'top');
-                    }
-                    
-                    badge.textContent = modelName;
-                    container.appendChild(badge);
-                });
-            });
-            
-            // 初始化提示工具（如果有Bootstrap的tooltip可用）
-            if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
-                const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                tooltipTriggerList.map(function (tooltipTriggerEl) {
-                    return new bootstrap.Tooltip(tooltipTriggerEl);
-                });
-            }
-        }
+// ── Data ──────────────────────────────────────────────────────────────────────
 
-        function updateGPUCards(gpus) {
-            const container = document.getElementById('gpu-container');
-            container.innerHTML = '';
-            
-            if (!gpus || gpus.length === 0) {
-                container.innerHTML = '<div class="col-12"><div class="alert alert-warning">未檢測到GPU</div></div>';
-                return;
-            }
-            
-            gpus.forEach(gpu => {
-                const card = document.createElement('div');
-                card.className = 'col-md-6 gpu-card';
-                card.innerHTML = `
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="card-title">${gpu.name} (ID: ${gpu.id})</h5>
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <div class="chart-container">
-                                        <canvas id="load-chart-${gpu.id}"></canvas>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="temp-container">
-                                        <div class="temp-bar">
-                                            <div id="temp-fill-${gpu.id}" class="temp-fill"></div>
-                                        </div>
-                                        <div id="temp-text-${gpu.id}" class="temp-text"></div>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="chart-container">
-                                        <canvas id="memory-chart-${gpu.id}"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="process-list">
-                                <h6>運行中的進程:</h6>
-                                <table class="table table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>PID</th>
-                                            <th>內存</th>
-                                            <th>名稱</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${gpu.processes && gpu.processes.length > 0 ? 
-                                            gpu.processes.map(process => `
-                                                <tr>
-                                                    <td>${process.pid}</td>
-                                                    <td>${process.memory} MB</td>
-                                                    <td>${process.name}</td>
-                                                </tr>
-                                            `).join('') : 
-                                            '<tr><td colspan="3">沒有進程在運行</td></tr>'
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(card);
+function refresh() {
+  clearInterval(timerInterval);
+  refreshTimer = 30;
+  fetchData();
+  startTimer();
+}
 
-                createDoughnutChart(`load-chart-${gpu.id}`, 'GPU 負載', gpu.load, `${gpu.load.toFixed(1)}%`, `${(100-gpu.load).toFixed(1)}%`);
-                const memoryUsedPercentage = (gpu.memory_used / gpu.memory_total) * 100;
-                createDoughnutChart(`memory-chart-${gpu.id}`, '記憶體', memoryUsedPercentage, `${gpu.memory_used}MB`, `${gpu.memory_free}MB`);
-                updateTempBar(`temp-fill-${gpu.id}`, `temp-text-${gpu.id}`, gpu.temperature);
-            });
-        }
+function startTimer() {
+  timerInterval = setInterval(() => {
+    refreshTimer--;
+    document.getElementById('countdown').textContent = `next update in ${refreshTimer}s`;
+    if (refreshTimer <= 0) refresh();
+  }, 1000);
+}
 
-        function createDoughnutChart(canvasId, label, usedPercentage, usedLabel, freeLabel) {
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['已使用', '空閒'],
-                    datasets: [{
-                        data: [usedPercentage, 100 - usedPercentage],
-                        backgroundColor: ['#ff6384', '#36a2eb']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        title: {
-                            display: true,
-                            text: label
-                        },
-                        tooltip: {
-                            enabled: false
-                        }
-                    }
-                },
-                plugins: [{
-                    id: 'centerText',
-                    afterDraw: function(chart) {
-                        var width = chart.width,
-                            height = chart.height,
-                            ctx = chart.ctx;
+async function fetchData() {
+  try {
+    const res = await fetch('/gpu_data');
+    const data = await res.json();
+    renderGPUs(data.gpus || []);
+    renderModels(data.ollama_models || [], data.api_errors || []);
+    document.getElementById('status-dot').style.background = 'var(--accent)';
+    document.getElementById('status-dot').style.boxShadow = '0 0 6px var(--accent)';
+  } catch(e) {
+    document.getElementById('status-dot').style.background = 'var(--red)';
+    document.getElementById('status-dot').style.boxShadow = '0 0 6px var(--red)';
+    console.error('fetchData error:', e);
+  }
+}
 
-                        ctx.restore();
-                        ctx.textBaseline = "middle";
-                        ctx.textAlign = "center";
+// ── GPU rendering ─────────────────────────────────────────────────────────────
 
-                        var centerX = width / 2,
-                            centerY = height / 2;
+function tempClass(t) {
+  if (t < 60) return 'temp-cool';
+  if (t < 80) return 'temp-warm';
+  return 'temp-hot';
+}
 
-                        // 繪製百分比
-                        ctx.font = "bold 16px Arial";
-                        ctx.fillStyle = "#000";
-                        ctx.fillText(`${usedPercentage.toFixed(1)}%`, centerX, centerY - 15);
+function renderGPUs(gpus) {
+  const container = document.getElementById('gpu-container');
+  if (!gpus.length) {
+    container.innerHTML = '<div style="padding:1.25rem;color:var(--muted)">No GPU detected.</div>';
+    return;
+  }
 
-                        // 繪製已使用標籤
-                        ctx.font = "12px Arial";
-                        ctx.fillStyle = "#ff6384";
-                        ctx.fillText(usedLabel, centerX, centerY + 5);
+  // Destroy old charts
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
 
-                        // 繪製空閒標籤
-                        ctx.fillStyle = "#36a2eb";
-                        ctx.fillText(freeLabel, centerX, centerY + 20);
+  container.innerHTML = gpus.map(gpu => {
+    const memPct = (gpu.memory_used / gpu.memory_total * 100).toFixed(1);
+    const procs = gpu.processes || [];
+    return `
+    <div class="gpu-card">
+      <div class="gpu-title">
+        <span class="gpu-name">${gpu.name}</span>
+        <span class="temp-badge ${tempClass(gpu.temperature)}">${gpu.temperature}°C</span>
+      </div>
 
-                        ctx.save();
-                    }
-                }]
-            });
-        }
+      <div class="bars">
+        <div class="bar-row">
+          <div class="bar-label"><span>GPU Load</span><span>${gpu.load}%</span></div>
+          <div class="bar-track"><div class="bar-fill bar-gpu" style="width:${gpu.load}%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"><span>VRAM</span><span>${gpu.memory_used} / ${gpu.memory_total} MB (${memPct}%)</span></div>
+          <div class="bar-track"><div class="bar-fill bar-vram" style="width:${memPct}%"></div></div>
+        </div>
+      </div>
 
-        function updateTempBar(fillId, textId, temperature) {
-            const fillElement = document.getElementById(fillId);
-            const textElement = document.getElementById(textId);
-            
-            // 假設最高溫度為100°C
-            const percentage = (temperature / 100) * 100;
-            fillElement.style.width = `${percentage}%`;
-            
-            // 根據溫度改變顏色
-            if (temperature < 50) {
-                fillElement.style.backgroundColor = '#36a2eb';  // 藍色
-            } else if (temperature < 80) {
-                fillElement.style.backgroundColor = '#ffcd56';  // 黃色
-            } else {
-                fillElement.style.backgroundColor = '#ff6384';  // 紅色
-            }
-            
-            textElement.textContent = `溫度: ${temperature}°C`;
-        }
+      <div class="charts">
+        <div class="chart-box">
+          <div class="chart-title">GPU Load</div>
+          <canvas id="chart-load-${gpu.id}"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">VRAM Usage</div>
+          <canvas id="chart-mem-${gpu.id}"></canvas>
+        </div>
+      </div>
 
-        function updateCountdown() {
-            countdown--;
-            document.getElementById('countdown').textContent = `下一次更新將在 ${countdown} 秒內進行`;
-            if (countdown <= 0) {
-                updateGPUInfo();
-            }
-        }
+      <div class="proc-wrap">
+        <table>
+          <thead><tr><th>PID</th><th>VRAM (MB)</th><th>Process</th></tr></thead>
+          <tbody>
+            ${procs.length ? procs.map(p => `
+              <tr><td>${p.pid}</td><td>${p.memory}</td><td>${p.name}</td></tr>
+            `).join('') : '<tr><td colspan="3" style="color:var(--muted)">No running processes</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
 
-        // 初始更新
-        updateGPUInfo();
-        setInterval(updateCountdown, 1000);
-    </script>
+  // Build charts after DOM is ready
+  gpus.forEach(gpu => {
+    const memPct = gpu.memory_used / gpu.memory_total * 100;
+    charts[`load-${gpu.id}`] = makeDonut(`chart-load-${gpu.id}`, gpu.load, 100 - gpu.load, '#00d4aa');
+    charts[`mem-${gpu.id}`]  = makeDonut(`chart-mem-${gpu.id}`,  memPct,  100 - memPct,  '#42a5f5');
+  });
+}
+
+function makeDonut(id, used, free, color) {
+  const ctx = document.getElementById(id).getContext('2d');
+  return new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [used, free],
+        backgroundColor: [color, 'rgba(255,255,255,.06)'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '72%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+      },
+      animation: { duration: 400 },
+    },
+    plugins: [{
+      id: 'centerLabel',
+      afterDraw(chart) {
+        const { ctx, width, height } = chart;
+        ctx.save();
+        ctx.font = 'bold 14px monospace';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${used.toFixed(1)}%`, width / 2, height / 2);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+// ── Models rendering ──────────────────────────────────────────────────────────
+
+function renderModels(models, errors) {
+  const container = document.getElementById('models-container');
+
+  if (!models.length && !errors.length) {
+    container.innerHTML = '<span class="no-models">No models found. Configure API URLs in Settings.</span>';
+    return;
+  }
+
+  const bySource = {};
+  models.forEach(m => {
+    const src = m.source || 'unknown';
+    (bySource[src] = bySource[src] || []).push(m);
+  });
+
+  let html = Object.entries(bySource).map(([src, list]) => `
+    <div class="model-group">
+      <div class="model-source">${src}</div>
+      <div class="model-pills">
+        ${list.map(m => `<span class="pill" title="${modelTooltip(m)}">${m.name || 'unnamed'}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  if (errors.length) {
+    html += errors.map(e => `<div class="api-error">⚠ ${e}</div>`).join('');
+  }
+
+  container.innerHTML = html;
+}
+
+function modelTooltip(m) {
+  if (!m.details) return m.modified_at ? `Modified: ${new Date(m.modified_at).toLocaleDateString()}` : '';
+  const size = m.size ? `${(m.size/1024/1024/1024).toFixed(2)} GB` : '';
+  return [size, m.details.parameter_size, m.details.quantization_level].filter(Boolean).join(' · ');
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+let currentUrls = [];
+
+async function openSettings() {
+  try {
+    const res = await fetch('/gpu_data');
+    const data = await res.json();
+    currentUrls = [...(data.api_urls || [])];
+  } catch { currentUrls = []; }
+
+  renderUrlList();
+  document.getElementById('settings-panel').classList.add('open');
+  document.getElementById('save-msg').textContent = '';
+}
+
+function closeSettings() {
+  document.getElementById('settings-panel').classList.remove('open');
+}
+
+function renderUrlList() {
+  const list = document.getElementById('url-list');
+  list.innerHTML = currentUrls.map((url, i) => `
+    <div class="url-row">
+      <input class="url-input" type="url" value="${url}" placeholder="https://your-ollama-host/api/tags"
+        oninput="currentUrls[${i}]=this.value"/>
+      <button class="del-btn" onclick="removeUrl(${i})">✕</button>
+    </div>
+  `).join('') || '<div style="color:var(--muted);font-size:.8rem">No URLs configured.</div>';
+}
+
+function addUrlRow() {
+  currentUrls.push('');
+  renderUrlList();
+}
+
+function removeUrl(i) {
+  currentUrls.splice(i, 1);
+  renderUrlList();
+}
+
+async function saveUrls() {
+  const urls = currentUrls.filter(u => u.trim());
+  try {
+    const res = await fetch('/update_urls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls }),
+    });
+    const data = await res.json();
+    const msg = document.getElementById('save-msg');
+    if (data.success) {
+      msg.textContent = 'Saved ✓';
+      msg.style.color = 'var(--accent)';
+      setTimeout(() => closeSettings(), 800);
+      refresh();
+    } else {
+      msg.textContent = data.message || 'Error';
+      msg.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    document.getElementById('save-msg').textContent = 'Network error';
+  }
+}
+
+// Close panel on backdrop click
+document.getElementById('settings-panel').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+fetchData();
+startTimer();
+</script>
 </body>
 </html>
